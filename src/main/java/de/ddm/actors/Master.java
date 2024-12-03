@@ -17,6 +17,9 @@ public class Master extends AbstractBehavior<Master.Message> {
 	////////////////////
 	// Actor Messages //
 	////////////////////
+	//Master.Message is the interface and we have start and shutdown message. Thats all this actor can do.
+	// We have to figure out what it should with start and shutdown messages.
+
 
 	public interface Message extends AkkaSerializable {
 	}
@@ -34,12 +37,16 @@ public class Master extends AbstractBehavior<Master.Message> {
 	////////////////////////
 	// Actor Construction //
 	////////////////////////
+	//Every actor should define its own name how it would like to be spawned in the actor hierarchy
+
 
 	public static final String DEFAULT_NAME = "master";
+//Then we have this factory method,this method simply calls the constructor.
 
 	public static Behavior<Message> create() {
 		return Behaviors.setup(Master::new);
 	}
+	//We forwards the start message to the dependency miner to start some action.
 
 	private Master(ActorContext<Message> context) {
 		super(context);
