@@ -11,9 +11,11 @@ import java.util.Objects;
 @AllArgsConstructor
 public class InclusionDependency {
 
+
 	private final File dependentFile;
 	private final String[] dependentAttributes;
 
+	//for example, dependentAttributes from dependentFile are included in referencedAttributes from this particular file referencedFile
 	private final File referencedFile;
 	private final String[] referencedAttributes;
 

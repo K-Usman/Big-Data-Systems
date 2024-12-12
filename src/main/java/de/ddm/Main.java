@@ -23,9 +23,9 @@ public class Main {
 
 			guardian.tell(new Guardian.StartMessage());
 
-			waitForInput(">>> Press ENTER to exit <<<");
-
-			guardian.tell(new Guardian.ShutdownMessage());
+//			waitForInput(">>> Press ENTER to exit <<<");
+//
+//			guardian.tell(new Guardian.ShutdownMessage());
 		}
 	} //if we end our program here, it would still be alive and wait for input.
 

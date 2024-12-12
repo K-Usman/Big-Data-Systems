@@ -7,6 +7,7 @@ import java.lang.management.MemoryUsage;
 
 public class MemoryUtils {
 
+    //get total size of the object to send it  somewhere
     public static long byteSizeOf(Object object) {
         return GraphLayout.parseInstance(object).totalSize();
     }

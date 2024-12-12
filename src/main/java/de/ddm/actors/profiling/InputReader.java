@@ -86,13 +86,14 @@ public class InputReader extends AbstractBehavior<InputReader.Message> {
 				.onSignal(PostStop.class, this::handle)
 				.build();
 	}
-
+	//responds to dependencyminer with a header message.
 	private Behavior<Message> handle(ReadHeaderMessage message) {
 		message.getReplyTo().tell(new DependencyMiner.HeaderMessage(this.id, this.header));
 		return this;
 	}
-
+	//reads a specific number of lines(batchSize) and responds to dependencyminer with these lines.
 	private Behavior<Message> handle(ReadBatchMessage message) throws IOException, CsvValidationException {
+		//'batch' will contain the rows of data from csv files.
 		List<String[]> batch = new ArrayList<>(message.getBatchSize());
 		for (int i = 0; i < message.getBatchSize(); i++) {
 			String[] line = this.reader.readNext();
@@ -100,7 +101,7 @@ public class InputReader extends AbstractBehavior<InputReader.Message> {
 				break;
 			batch.add(line);
 		}
-
+		// here send the batchmessage back to dependencyminer.
 		message.getReplyTo().tell(new DependencyMiner.BatchMessage(this.id, batch));
 		return this;
 	}

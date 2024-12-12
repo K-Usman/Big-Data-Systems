@@ -54,7 +54,8 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 
 	private DependencyWorker(ActorContext<Message> context) {
 		super(context);
-
+		/* from slide 37, same thing happening here. Worker is being registered to receptionist. here is connecting
+		 to DependencyMiner not master */
 		final ActorRef<Receptionist.Listing> listingResponseAdapter = context.messageAdapter(Receptionist.Listing.class, ReceptionistListingMessage::new);
 		context.getSystem().receptionist().tell(Receptionist.subscribe(DependencyMiner.dependencyMinerService, listingResponseAdapter));
 
@@ -79,17 +80,21 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 				.build();
 	}
 
+	//get a list of actor refs of actors registered to DependencyMiner service.
 	private Behavior<Message> handle(ReceptionistListingMessage message) {
 		Set<ActorRef<DependencyMiner.Message>> dependencyMiners = message.getListing().getServiceInstances(DependencyMiner.dependencyMinerService);
 		for (ActorRef<DependencyMiner.Message> dependencyMiner : dependencyMiners)
+			// this dependencyMiner(like Master) will then notify other registered actors about this new actors
+			//availability
 			dependencyMiner.tell(new DependencyMiner.RegistrationMessage(this.getContext().getSelf()));
 		return this;
 	}
 
 	private Behavior<Message> handle(TaskMessage message) {
-		this.getContext().getLog().info("Working!");
+		this.getContext().getLog().info("I am Working!");
 		// I should probably know how to solve this task, but for now I just pretend some work...
 
+		//simulating random stuff here. Here IND discovery may be performed.
 		int result = message.getTask();
 		long time = System.currentTimeMillis();
 		Random rand = new Random();

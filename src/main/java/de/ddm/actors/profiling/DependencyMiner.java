@@ -86,6 +86,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 		return Behaviors.setup(DependencyMiner::new);
 	}
 
+	// with the creation of dependencyminer, other actors inputreader,resultcollector and largemessageproxy will be spawned.
 	private DependencyMiner(ActorContext<Message> context) {
 		super(context);
 		this.discoverNaryDependencies = SystemConfigurationSingleton.get().isHardMode();
@@ -135,6 +136,8 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 				.build();
 	}
 
+	/* sends ReaderHeaderMessage and ReadBatchMessage to input reader actors to start reading
+	files and data in batches. this is happening in handle(ReadHeaderMessage/ReadBatchMessage message) */
 	private Behavior<Message> handle(StartMessage message) {
 		for (ActorRef<InputReader.Message> inputReader : this.inputReaders)
 			inputReader.tell(new InputReader.ReadHeaderMessage(this.getContext().getSelf()));
@@ -143,7 +146,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 		this.startTime = System.currentTimeMillis();
 		return this;
 	}
-
+// here it will store the headers received from inputReader in response.
 	private Behavior<Message> handle(HeaderMessage message) {
 		this.headerLines[message.getId()] = message.getHeader();
 		return this;
@@ -152,14 +155,16 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	private Behavior<Message> handle(BatchMessage message) {
 		// Ignoring batch content for now ... but I could do so much with it.
 
+
 //		System.out.println(MemoryUtils.byteSizeOf(message.getBatch()));
 //		System.out.println(MemoryUtils.bytesMax() + "    " + MemoryUtils.bytesFree());
 
+// here it will check if the current batch is empty then it will request a new batch.
 		if (!message.getBatch().isEmpty())
 			this.inputReaders.get(message.getId()).tell(new InputReader.ReadBatchMessage(this.getContext().getSelf(), 10000));
 		return this;
 	}
-
+//register or add the dependency worker to the list dependencyWorkers
 	private Behavior<Message> handle(RegistrationMessage message) {
 		ActorRef<DependencyWorker.Message> dependencyWorker = message.getDependencyWorker();
 		if (!this.dependencyWorkers.contains(dependencyWorker)) {
