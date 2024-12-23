@@ -18,6 +18,7 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 
 public class ResultCollector extends AbstractBehavior<ResultCollector.Message> {
@@ -34,7 +35,8 @@ public class ResultCollector extends AbstractBehavior<ResultCollector.Message> {
 	@AllArgsConstructor
 	public static class ResultMessage implements Message {
 		private static final long serialVersionUID = -7070569202900845736L;
-		List<InclusionDependency> inclusionDependencies;
+//		List<InclusionDependency> inclusionDependencies;
+		String[][] result;
 	}
 
 	@NoArgsConstructor
@@ -86,8 +88,8 @@ public class ResultCollector extends AbstractBehavior<ResultCollector.Message> {
 	private Behavior<Message> handle(ResultMessage message) throws IOException {
 //		this.getContext().getLog().info("Received {} INDs!", message.getInclusionDependencies().size());
 
-		for (InclusionDependency ind : message.getInclusionDependencies()) {
-			this.writer.write(ind.toString());
+		for (String[] ind : message.getResult()) {
+			this.writer.write(Arrays.toString(ind));
 			this.writer.newLine();
 		}
 

@@ -62,7 +62,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	@AllArgsConstructor
 	public static class RegistrationMessage implements Message {
 		private static final long serialVersionUID = -4025238529984914107L;
-		ActorRef<DependencyWorker.Message> dependencyWorker;
+		ActorRef<DataProvider.Message> dataProvider;
 	}
 
 	@Getter
@@ -71,7 +71,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	public static class CompletionMessage implements Message {
 		private static final long serialVersionUID = -7642425159675583598L;
 		ActorRef<DependencyWorker.Message> dependencyWorker;
-		int result;
+		String[][] result;
 	}
 
 	////////////////////////
@@ -118,7 +118,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	private final ActorRef<ResultCollector.Message> resultCollector;
 	private final ActorRef<LargeMessageProxy.Message> largeMessageProxy;
 
-	private final List<ActorRef<DependencyWorker.Message>> dependencyWorkers;
+	private final List<ActorRef<DataProvider.Message>> dependencyWorkers;
 
 	////////////////////
 	// Actor Behavior //
@@ -146,7 +146,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 		this.startTime = System.currentTimeMillis();
 		return this;
 	}
-// here it will store the headers received from inputReader in response.
+	// here it will store the headers received from inputReader in response.
 	private Behavior<Message> handle(HeaderMessage message) {
 		this.headerLines[message.getId()] = message.getHeader();
 		return this;
@@ -164,16 +164,18 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 			this.inputReaders.get(message.getId()).tell(new InputReader.ReadBatchMessage(this.getContext().getSelf(), 10000));
 		return this;
 	}
-//register or add the dependency worker to the list dependencyWorkers
+	//register or add the dependency worker to the list dependencyWorkers
 	private Behavior<Message> handle(RegistrationMessage message) {
-		ActorRef<DependencyWorker.Message> dependencyWorker = message.getDependencyWorker();
-		if (!this.dependencyWorkers.contains(dependencyWorker)) {
-			this.dependencyWorkers.add(dependencyWorker);
-			this.getContext().watch(dependencyWorker);
+		ActorRef<DataProvider.Message> dataProvider = message.getDataProvider();
+		if (!this.dependencyWorkers.contains(dataProvider)) {
+			this.dependencyWorkers.add(dataProvider);
+			this.getContext().watch(dataProvider);
 			// The worker should get some work ... let me send her something before I figure out what I actually want from her.
 			// I probably need to idle the worker for a while, if I do not have work for it right now ... (see master/worker pattern)
-
-			dependencyWorker.tell(new DependencyWorker.TaskMessage(this.largeMessageProxy, 42));
+			if(this.headerLines==null){
+				getContext().getLog().info("Header is null");
+			}
+			dataProvider.tell(new DataProvider.AssignHeadersMessage(this.getContext().getSelf(),this.headerLines));
 		}
 		return this;
 	}
@@ -181,25 +183,13 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	private Behavior<Message> handle(CompletionMessage message) {
 		ActorRef<DependencyWorker.Message> dependencyWorker = message.getDependencyWorker();
 		// If this was a reasonable result, I would probably do something with it and potentially generate more work ... for now, let's just generate a random, binary IND.
+		String[][] result= message.getResult();
+		this.resultCollector.tell(new ResultCollector.ResultMessage(result));
 
-		if (this.headerLines[0] != null) {
-			Random random = new Random();
-			int dependent = random.nextInt(this.inputFiles.length);
-			int referenced = random.nextInt(this.inputFiles.length);
-			File dependentFile = this.inputFiles[dependent];
-			File referencedFile = this.inputFiles[referenced];
-			String[] dependentAttributes = {this.headerLines[dependent][random.nextInt(this.headerLines[dependent].length)], this.headerLines[dependent][random.nextInt(this.headerLines[dependent].length)]};
-			String[] referencedAttributes = {this.headerLines[referenced][random.nextInt(this.headerLines[referenced].length)], this.headerLines[referenced][random.nextInt(this.headerLines[referenced].length)]};
-			InclusionDependency ind = new InclusionDependency(dependentFile, dependentAttributes, referencedFile, referencedAttributes);
-			List<InclusionDependency> inds = new ArrayList<>(1);
-			inds.add(ind);
-
-			this.resultCollector.tell(new ResultCollector.ResultMessage(inds));
-		}
 		// I still don't know what task the worker could help me to solve ... but let me keep her busy.
 		// Once I found all unary INDs, I could check if this.discoverNaryDependencies is set to true and try to detect n-ary INDs as well!
 
-		dependencyWorker.tell(new DependencyWorker.TaskMessage(this.largeMessageProxy, 42));
+//		dependencyWorker.tell(new DependencyWorker.TaskMessage(this.largeMessageProxy, 42));
 
 		// At some point, I am done with the discovery. That is when I should call my end method. Because I do not work on a completable task yet, I simply call it after some time.
 		if (System.currentTimeMillis() - this.startTime > 2000000)

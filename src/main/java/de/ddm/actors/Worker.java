@@ -8,6 +8,7 @@ import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
 import de.ddm.actors.patterns.Reaper;
+import de.ddm.actors.profiling.DataProvider;
 import de.ddm.actors.profiling.DependencyWorker;
 import de.ddm.serialization.AkkaSerializable;
 import de.ddm.singletons.SystemConfigurationSingleton;
@@ -45,13 +46,23 @@ public class Worker extends AbstractBehavior<Worker.Message> {
 		Reaper.watchWithDefaultReaper(this.getContext().getSelf());
 
 		final int numWorkers = SystemConfigurationSingleton.get().getNumWorkers();
-
 		this.workers = new ArrayList<>(numWorkers);
-		for (int id = 0; id < numWorkers; id++)
-			this.workers.add(context.spawn(
+		for (int id = 0; id < numWorkers; id++) {
+			ActorRef<DependencyWorker.Message> dependencyWorkerRef = context.spawn(
 					DependencyWorker.create(),
 					DependencyWorker.DEFAULT_NAME + "_" + id,
-					DispatcherSelector.fromConfig("akka.worker-pool-dispatcher")));
+					DispatcherSelector.fromConfig("akka.worker-pool-dispatcher")
+			);
+			this.workers.add(dependencyWorkerRef);
+			ActorRef<DataProvider.Message> dataProviderRef = context.spawn(
+					DataProvider.create(dependencyWorkerRef),
+					"DataProvider"
+			);
+			context.getLog().info("DataProvider actor created, sending ReceptionistListingMessage...");
+			// Send the DependencyWorker reference to DataProvider
+			dataProviderRef.tell(new DataProvider.SetDependencyWorkerReference(dependencyWorkerRef));
+			context.getLog().info("Sent DependencyWorker reference: {} to DataProvider", dependencyWorkerRef.path());
+		}
 	}
 
 	/////////////////

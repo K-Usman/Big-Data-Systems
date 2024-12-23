@@ -38,8 +38,9 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 	@AllArgsConstructor
 	public static class TaskMessage implements Message {
 		private static final long serialVersionUID = -4667745204456518160L;
-		ActorRef<LargeMessageProxy.Message> dependencyMinerLargeMessageProxy;
-		int task;
+//		ActorRef<LargeMessageProxy.Message> dependencyMinerLargeMessageProxy;
+		ActorRef<DependencyMiner.Message> dependencyMinerRef;
+		String[][] header;
 	}
 
 	////////////////////////
@@ -82,28 +83,33 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 
 	//get a list of actor refs of actors registered to DependencyMiner service.
 	private Behavior<Message> handle(ReceptionistListingMessage message) {
-		Set<ActorRef<DependencyMiner.Message>> dependencyMiners = message.getListing().getServiceInstances(DependencyMiner.dependencyMinerService);
-		for (ActorRef<DependencyMiner.Message> dependencyMiner : dependencyMiners)
+//		Set<ActorRef<DependencyMiner.Message>> dependencyMiners = message.getListing().getServiceInstances(DependencyMiner.dependencyMinerService);
+//		for (ActorRef<DependencyMiner.Message> dependencyMiner : dependencyMiners)
 			// this dependencyMiner(like Master) will then notify other registered actors about this new actors
 			//availability
-			dependencyMiner.tell(new DependencyMiner.RegistrationMessage(this.getContext().getSelf()));
+//			dependencyMiner.tell(new DependencyMiner.RegistrationMessage(this.getContext().getSelf()));
 		return this;
 	}
 
 	private Behavior<Message> handle(TaskMessage message) {
+		ActorRef<DependencyMiner.Message> dependencyMinerRef = message.getDependencyMinerRef();
 		this.getContext().getLog().info("I am Working!");
 		// I should probably know how to solve this task, but for now I just pretend some work...
 
 		//simulating random stuff here. Here IND discovery may be performed.
-		int result = message.getTask();
-		long time = System.currentTimeMillis();
-		Random rand = new Random();
-		int runtime = (rand.nextInt(2) + 2) * 1000;
-		while (System.currentTimeMillis() - time < runtime)
-			result = ((int) Math.abs(Math.sqrt(result)) * result) % 1334525;
+		this.getContext().getLog().info("Processing data batch for task.");
 
-		LargeMessageProxy.LargeMessage completionMessage = new DependencyMiner.CompletionMessage(this.getContext().getSelf(), result);
-		this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(completionMessage, message.getDependencyMinerLargeMessageProxy()));
+		// Simulate processing the task (random computation or dummy transformation)
+		String[][] result = message.getHeader();
+		for (int i = 0; i < result.length; i++) {
+			for (int j = 0; j < result[i].length; j++) {
+				result[i][j] = result[i][j] + " processed";
+			}
+		}
+
+		dependencyMinerRef.tell(new DependencyMiner.CompletionMessage(this.getContext().getSelf(),result));
+//		LargeMessageProxy.LargeMessage completionMessage = new DependencyMiner.CompletionMessage(this.getContext().getSelf(), result);
+//		this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(completionMessage, message.getDependencyMinerLargeMessageProxy()));
 
 		return this;
 	}
