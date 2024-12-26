@@ -2,7 +2,6 @@ package de.ddm.actors.profiling;
 
 import akka.actor.typed.ActorRef;
 import akka.actor.typed.Behavior;
-import akka.actor.typed.DispatcherSelector;
 import akka.actor.typed.javadsl.AbstractBehavior;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
@@ -10,7 +9,6 @@ import akka.actor.typed.javadsl.Receive;
 import akka.actor.typed.receptionist.Receptionist;
 import de.ddm.actors.patterns.LargeMessageProxy;
 import de.ddm.serialization.AkkaSerializable;
-import de.ddm.singletons.SystemConfigurationSingleton;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -42,7 +40,7 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
         private static final long serialVersionUID = -2836164504241926323L;
 //        ActorRef<LargeMessageProxy.Message> dependencyMinerLargeMessageProxy;
           ActorRef<DependencyMiner.Message> dependencyMinerRef;
-          String[][] header;
+          String[][] headers;
     }
 
 
@@ -59,8 +57,8 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
     @AllArgsConstructor
     public static class AssignBatchMessage implements Message {
         private static final long serialVersionUID = -2913390488657018394L;
-        int id;
-        List<String[]> batch;
+        ActorRef<DependencyMiner.Message> dependencyMinerRef;
+        List<List<String[]>> batches;
     }
 
 //    @Getter
@@ -87,7 +85,7 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
         this.dependencyWorkerRef = dependencyWorkerRef;
 
 
-        this.headers = new String[20][20];
+//        this.headers = new String[20][20];
         // Create a message adapter for the receptionist listing
         final ActorRef<Receptionist.Listing> listingResponseAdapter =
                 context.messageAdapter(Receptionist.Listing.class, ReceptionistListingMessage::new);
@@ -109,6 +107,7 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
     private final ActorRef<DependencyWorker.Message> dependencyWorkerRef;
 //    private final Map<Integer, String[]> assignedHeaders = new HashMap<>();
     private String[][] headers;
+    private  List<List<String[]>> batchLines;
     private final Map<Integer, List<String[]>> assignedBatches = new HashMap<>();
     private final ActorRef<LargeMessageProxy.Message> largeMessageProxy;
     private ActorRef<DependencyMiner.Message> dependencyMinerRef; // Store DependencyMiner reference
@@ -140,20 +139,28 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
 
     private Behavior<Message> handle(AssignHeadersMessage message) {
         getContext().getLog().info("Getting headers");
-        getContext().getLog().info("Sending headers to worker");
-        this.headers=message.getHeader();
-        this.dependencyMinerRef=message.dependencyMinerRef;
-        if(dependencyMinerRef==null){
-            getContext().getLog().info("This is null");
-        }
-        dependencyWorkerRef.tell(new DependencyWorker.TaskMessage(dependencyMinerRef,this.headers));
+        this.headers = message.getHeaders();
+        this.dependencyMinerRef = message.getDependencyMinerRef();
+        sendTaskToWorker(); // Send both headers and batches if available
         return this;
     }
 
 
     private Behavior<Message> handle(AssignBatchMessage message) {
-
+        getContext().getLog().info("Getting batches");
+        this.batchLines = message.getBatches();
+        this.dependencyMinerRef = message.getDependencyMinerRef();
+        sendTaskToWorker(); // Send both headers and batches if available
         return this;
+    }
+
+    private void sendTaskToWorker() {
+        if (this.headers != null && this.batchLines != null && this.dependencyMinerRef != null) {
+            getContext().getLog().info("Sending headers and batches to worker");
+            dependencyWorkerRef.tell(new DependencyWorker.TaskMessage(this.dependencyMinerRef, this.headers, this.batchLines));
+        } else {
+            getContext().getLog().info("Headers or batches are not yet fully received");
+        }
     }
 
 //    private Behavior<Message> handle(StealHeadersMessage message) {

@@ -35,8 +35,8 @@ public class ResultCollector extends AbstractBehavior<ResultCollector.Message> {
 	@AllArgsConstructor
 	public static class ResultMessage implements Message {
 		private static final long serialVersionUID = -7070569202900845736L;
-//		List<InclusionDependency> inclusionDependencies;
-		String[][] result;
+		List<InclusionDependency> inclusionDependencies;
+//		String[][] result;
 	}
 
 	@NoArgsConstructor
@@ -88,8 +88,8 @@ public class ResultCollector extends AbstractBehavior<ResultCollector.Message> {
 	private Behavior<Message> handle(ResultMessage message) throws IOException {
 //		this.getContext().getLog().info("Received {} INDs!", message.getInclusionDependencies().size());
 
-		for (String[] ind : message.getResult()) {
-			this.writer.write(Arrays.toString(ind));
+		for (InclusionDependency ind : message.getInclusionDependencies()) {
+			this.writer.write(ind.toString());
 			this.writer.newLine();
 		}
 

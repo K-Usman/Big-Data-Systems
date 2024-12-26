@@ -71,7 +71,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	public static class CompletionMessage implements Message {
 		private static final long serialVersionUID = -7642425159675583598L;
 		ActorRef<DependencyWorker.Message> dependencyWorker;
-		String[][] result;
+		List<InclusionDependency> inclusionDependencies;
 	}
 
 	////////////////////////
@@ -92,6 +92,10 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 		this.discoverNaryDependencies = SystemConfigurationSingleton.get().isHardMode();
 		this.inputFiles = InputConfigurationSingleton.get().getInputFiles();
 		this.headerLines = new String[this.inputFiles.length][];
+		this.batchLines = new ArrayList<>(this.inputFiles.length);
+		for (int i = 0; i < this.inputFiles.length; i++) {
+			this.batchLines.add(new ArrayList<>()); // Initialize each batch list
+		}
 
 		this.inputReaders = new ArrayList<>(inputFiles.length);
 		for (int id = 0; id < this.inputFiles.length; id++)
@@ -113,6 +117,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	private final boolean discoverNaryDependencies;
 	private final File[] inputFiles;
 	private final String[][] headerLines;
+	private final List<List<String[]>> batchLines;
 
 	private final List<ActorRef<InputReader.Message>> inputReaders;
 	private final ActorRef<ResultCollector.Message> resultCollector;
@@ -154,6 +159,13 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 
 	private Behavior<Message> handle(BatchMessage message) {
 		// Ignoring batch content for now ... but I could do so much with it.
+		int id = message.getId();
+		List<String[]> batch = message.getBatch();
+		if (id < batchLines.size()) {
+			batchLines.get(id).addAll(batch); // Add all rows to the corresponding batch list
+		} else {
+			getContext().getLog().info("Received batch for invalid id: {}", id);
+		}
 
 
 //		System.out.println(MemoryUtils.byteSizeOf(message.getBatch()));
@@ -176,6 +188,10 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 				getContext().getLog().info("Header is null");
 			}
 			dataProvider.tell(new DataProvider.AssignHeadersMessage(this.getContext().getSelf(),this.headerLines));
+			if(this.batchLines==null){
+				getContext().getLog().info("Batches are empty");
+			}
+			dataProvider.tell(new DataProvider.AssignBatchMessage(this.getContext().getSelf(),this.batchLines));
 		}
 		return this;
 	}
@@ -183,7 +199,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	private Behavior<Message> handle(CompletionMessage message) {
 		ActorRef<DependencyWorker.Message> dependencyWorker = message.getDependencyWorker();
 		// If this was a reasonable result, I would probably do something with it and potentially generate more work ... for now, let's just generate a random, binary IND.
-		String[][] result= message.getResult();
+		List<InclusionDependency> result= message.getInclusionDependencies();
 		this.resultCollector.tell(new ResultCollector.ResultMessage(result));
 
 		// I still don't know what task the worker could help me to solve ... but let me keep her busy.
@@ -192,8 +208,9 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 //		dependencyWorker.tell(new DependencyWorker.TaskMessage(this.largeMessageProxy, 42));
 
 		// At some point, I am done with the discovery. That is when I should call my end method. Because I do not work on a completable task yet, I simply call it after some time.
-		if (System.currentTimeMillis() - this.startTime > 2000000)
+		if(result.size()>50){
 			this.end();
+		}
 		return this;
 	}
 
