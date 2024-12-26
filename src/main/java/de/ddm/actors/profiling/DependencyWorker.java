@@ -107,83 +107,57 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 
 		String[][] headers = message.getHeader();
 		List<List<String[]>> batches = message.getBatches();
-		int dependent = 6;
-		int referenced = 0;
-		File dependentFile = this.inputFiles[dependent];
-		File referencedFile = this.inputFiles[referenced];
-		List<String[]> batch0 = batches.get(6); // Batch for dependent
-		List<String[]> batch3 = batches.get(0); // Batch for referenced
-
-// Initialize the list to store all inclusion dependencies
 		List<InclusionDependency> inds = new ArrayList<>();
 
-// Find the number of columns in each batch
-		int dependentColumns = batch0.stream().mapToInt(row -> row.length).max().orElse(0);
-		int referencedColumns = batch3.stream().mapToInt(row -> row.length).max().orElse(0);
+		for (int dependent = 0; dependent < this.inputFiles.length; dependent++) {
+			File dependentFile = this.inputFiles[dependent];
+			List<String[]> dependentBatch = batches.get(dependent);
+			int dependentColumns = dependentBatch.stream().mapToInt(row -> row.length).max().orElse(0);
 
-// Check for inclusion dependencies within the same file (intra-file)
-		for (int i = 0; i < dependentColumns; i++) {
-			Set<String> column1Values = new HashSet<>();
-			for (String[] row : batch0) {
-				if (i < row.length) {
-					column1Values.add(row[i]);
-				}
-			}
+			for (int referenced = 0; referenced < this.inputFiles.length; referenced++) {
+				File referencedFile = this.inputFiles[referenced];
+				List<String[]> referencedBatch = batches.get(referenced);
+				int referencedColumns = referencedBatch.stream().mapToInt(row -> row.length).max().orElse(0);
 
-			for (int j = 0; j < dependentColumns; j++) {
-				// Skip self-dependencies
-				if (i == j) {
-					continue;
-				}
-				Set<String> column2Values = new HashSet<>();
-				for (String[] row : batch0) {
-					if (j < row.length) {
-						column2Values.add(row[j]);
+				// Check for inclusion dependencies
+				for (int i = 0; i < dependentColumns; i++) {
+					Set<String> dependentColumnValues = new HashSet<>();
+					for (String[] row : dependentBatch) {
+						if (i < row.length) {
+							dependentColumnValues.add(row[i]);
+						}
 					}
-				}
 
-				getContext().getLog().info(column1Values.toString());
-				getContext().getLog().info(column2Values.toString());
-				// Check for inclusion dependency
-				if (!column1Values.isEmpty() && !column2Values.isEmpty() && column1Values.containsAll(column2Values)) {
-					// Update referencedFile and add to inds
-					String[] dependentAttributes = {headers[dependent][i]};
-					String[] referencedAttributes = {headers[dependent][j]};
-					referencedFile = dependentFile;
+					for (int j = 0; j < referencedColumns; j++) {
+						// Skip self-dependencies when checking intra-file INDs
+						if (dependent == referenced && i == j) {
+							continue;
+						}
 
-					inds.add(new InclusionDependency(dependentFile, dependentAttributes, referencedFile, referencedAttributes));
-					getContext().getLog().info("Intra-dependent IND found between columns " + i + " and " + j);
-				}
-			}
-		}
+						Set<String> referencedColumnValues = new HashSet<>();
+						for (String[] row : referencedBatch) {
+							if (j < row.length) {
+								referencedColumnValues.add(row[j]);
+							}
+						}
 
-// Check for inclusion dependencies between dependent and referenced files (inter-file)
-		for (int i = 0; i < dependentColumns; i++) {
-			Set<String> dependentColumnValues = new HashSet<>();
-			for (String[] row : batch0) {
-				if (i < row.length) {
-					dependentColumnValues.add(row[i]);
-				}
-			}
+						// Check for inclusion dependency
+						if (!dependentColumnValues.isEmpty() && !referencedColumnValues.isEmpty()
+								&& referencedColumnValues.containsAll(dependentColumnValues)) {
+							String[] dependentAttributes = {headers[dependent][i]};
+							String[] referencedAttributes = {headers[referenced][j]};
 
-			for (int j = 0; j < referencedColumns; j++) {
-				Set<String> referencedColumnValues = new HashSet<>();
-				for (String[] row : batch3) {
-					if (j < row.length) {
-						referencedColumnValues.add(row[j]);
+							inds.add(new InclusionDependency(dependentFile, dependentAttributes, referencedFile, referencedAttributes));
+
+							if (dependent == referenced) {
+								getContext().getLog().info("Intra-file IND found in file " + dependent +
+										" between columns " + i + " and " + j);
+							} else {
+								getContext().getLog().info("Inter-file IND found between file " + dependent +
+										" column " + i + " and file " + referenced + " column " + j);
+							}
+						}
 					}
-				}
-
-				// Check for inclusion dependency
-				if (!dependentColumnValues.isEmpty() && !referencedColumnValues.isEmpty() && referencedColumnValues.containsAll(dependentColumnValues)) {
-					// Add to inds
-					getContext().getLog().info(dependentColumnValues.toString());
-					getContext().getLog().info(referencedColumnValues.toString());
-					String[] dependentAttributes = {headers[dependent][i]};
-					String[] referencedAttributes = {headers[referenced][j]};
-					referencedFile = this.inputFiles[referenced];
-					inds.add(new InclusionDependency(dependentFile, dependentAttributes, referencedFile, referencedAttributes));
-					getContext().getLog().info("Inter-file IND found between dependent column " + i + " and referenced column " + j);
 				}
 			}
 		}
