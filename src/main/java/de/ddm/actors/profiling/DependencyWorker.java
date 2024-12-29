@@ -104,8 +104,8 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 //			 this dependencyMiner(like Master) will then notify other registered actors about this new actors
 //			availability
 			dependencyMiner.tell(new DependencyMiner.GetWorkerRef(this.getContext().getSelf(),role));
-			getContext().getLog().info(role);
-			getContext().getLog().info("Send Dep Worker ref to DepMiner");
+			getContext().getLog().info("This dependencyWorker is spawned in {}",role);
+			getContext().getLog().info("Dep Worker ref {} has been sent to DepMiner",this.getContext().getSelf().path());
 		return this;
 	}
 
@@ -119,7 +119,7 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 		Random random = new Random();
 		if(this.inputFiles.length!=0){
 			this.getContext().getLog().info("I am Working!");
-			getContext().getLog().info(String.valueOf(this.inputFiles.length));
+			getContext().getLog().info("Number of Files received {}",String.valueOf(this.inputFiles.length));
 			// I should probably know how to solve this task, but for now I just pretend some work...
 
 			//simulating random stuff here. Here IND discovery may be performed.

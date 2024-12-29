@@ -137,7 +137,7 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
             // this dependencyMiner(like Master) will then notify other registered actors about this new actors
             //availability
             dependencyMiner.tell(new DependencyMiner.RegistrationMessage(this.getContext().getSelf(),this.role));
-            getContext().getLog().info("Data Prov ref sent to DepMiner");
+            getContext().getLog().info("Data Prov ref has been sent to DepMiner");
         return this;
     }
 
@@ -146,7 +146,7 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
         getContext().getLog().info("Getting headers");
         this.headers = message.getHeaders();
         this.dependencyMinerRef = message.getDependencyMinerRef();
-        getContext().getLog().info(String.valueOf(headers.length));
+        getContext().getLog().info("Number of headers received in DataProvider {}",String.valueOf(headers.length));
         sendTaskToWorker(); // Send both headers and batches if available
         return this;
     }
@@ -156,7 +156,7 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
         getContext().getLog().info("Getting batches");
         this.batchLines = message.getBatches();
         this.dependencyMinerRef = message.getDependencyMinerRef();
-        getContext().getLog().info(String.valueOf(batchLines.size()));
+        getContext().getLog().info("Number of Batches received in DataProvider {}",String.valueOf(batchLines.size()));
         sendTaskToWorker(); // Send both headers and batches if available
         return this;
     }
@@ -178,8 +178,7 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
             this.getContext().watch(dependencyWorker);
             // The worker should get some work ... let me send her something before I figure out what I actually want from her.
             // I probably need to idle the worker for a while, if I do not have work for it right now ... (see master/worker pattern)
-            getContext().getLog().info("Number of dep workers");
-            getContext().getLog().info(String.valueOf(dependencyWorkers.size()));
+            getContext().getLog().info("Number of dep workers {}",dependencyWorkers.size());
         }
         return this;
     }}

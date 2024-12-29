@@ -192,14 +192,13 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	private Behavior<Message> handle(RegistrationMessage message) {
 		ActorRef<DataProvider.Message> dataProvider = message.getDataProvider();
 		String role=message.getRole();
-		getContext().getLog().info(String.valueOf(dataProviders.size()));
 		if (!this.dataProviders.contains(dataProvider)) {
 			this.dataProviders.add(dataProvider);
 			this.getContext().watch(dataProvider);
 			// The worker should get some work ... let me send her something before I figure out what I actually want from her.
 			// I probably need to idle the worker for a while, if I do not have work for it right now ... (see master/worker pattern)
-			getContext().getLog().info(String.valueOf(dataProviders.size()));
-			getContext().getLog().info(role);
+			getContext().getLog().info("Number of registered Data Providers {}",String.valueOf(dataProviders.size()));
+//			getContext().getLog().info(role);
 			if(role.equals("worker")) {
 				getContext().getLog().info("Sending data to Data Provider from Dep Miner");
 				if (this.headerLines == null) {
@@ -211,7 +210,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 				}
 				dataProvider.tell(new DataProvider.AssignBatchMessage(this.getContext().getSelf(), this.batchLines));
 			}else {
-				getContext().getLog().info("Data Provider not yet joined");
+				getContext().getLog().info("Data Provider from worker actor system not yet joined");
 			}
 		}
 		return this;
@@ -225,7 +224,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 			this.getContext().watch(dependencyWorker);
 
 			if(role.equals("worker")) {
-				getContext().getLog().info("This is inside GetWorker"+role);
+				getContext().getLog().info("Received DependencyWorker ref. Sending files to it");
 				dependencyWorker.tell(new DependencyWorker.GetFiles(this.inputFiles));
 				getContext().getLog().info("Sent input files to Dep Worker from Miner");
 			}
