@@ -209,6 +209,10 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 					getContext().getLog().info("Batches are empty");
 				}
 				dataProvider.tell(new DataProvider.AssignBatchMessage(this.getContext().getSelf(), this.batchLines));
+				if (this.inputFiles == null) {
+					getContext().getLog().info("InputFiles are empty");
+				}
+				dataProvider.tell(new DataProvider.GetFiles(this.getContext().getSelf(), this.inputFiles));
 			}else {
 				getContext().getLog().info("Data Provider from worker actor system not yet joined");
 			}
@@ -222,15 +226,10 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 		if (!this.dependencyWorkers.contains(dependencyWorker)) {
 			this.dependencyWorkers.add(dependencyWorker);
 			this.getContext().watch(dependencyWorker);
-
-			if(role.equals("worker")) {
-				getContext().getLog().info("Received DependencyWorker ref. Sending files to it");
-				dependencyWorker.tell(new DependencyWorker.GetFiles(this.inputFiles));
-				getContext().getLog().info("Sent input files to Dep Worker from Miner");
-			}
+			getContext().getLog().info("Received DependencyWorker ref.");
 
 
-	}
+		}
 		return this;
 	}
 	private Behavior<Message> handle(CompletionMessage message) {

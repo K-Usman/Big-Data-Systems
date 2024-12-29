@@ -13,6 +13,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.io.File;
 import java.util.*;
 
 public class DataProvider extends AbstractBehavior<DataProvider.Message> {
@@ -59,6 +60,15 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
         private static final long serialVersionUID = -2913390488657018394L;
         ActorRef<DependencyMiner.Message> dependencyMinerRef;
         List<List<String[]>> batches;
+    }
+    @Getter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class GetFiles implements Message {
+        private static final long serialVersionUID = 6290504232351729605L;
+        ActorRef<DependencyMiner.Message> dependencyMinerRef;
+        File[] inputFiles;
+
     }
 
 //    @Getter
@@ -114,6 +124,7 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
     private ActorRef<DependencyMiner.Message> dependencyMinerRef; // Store DependencyMiner reference
     private final String role;
     private final List<ActorRef<DependencyWorker.Message>> dependencyWorkers;
+    private  File[] inputFiles;
 
     ////////////////////
     // Actor Behavior //
@@ -126,6 +137,8 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
                 .onMessage(AssignHeadersMessage.class, this::handle)
                 .onMessage(AssignBatchMessage.class, this::handle)
                 .onMessage(SetDependencyWorkerReference.class, this::handle)
+                .onMessage(GetFiles.class, this::handle)
+
 //                .onMessage(StealHeadersMessage.class, this::handle)
                 .build();
     }
@@ -161,11 +174,39 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
         return this;
     }
 
+    private Behavior<Message> handle(GetFiles message){
+        getContext().getLog().info("Getting Input Files");
+        this.inputFiles=message.getInputFiles();
+        this.dependencyMinerRef = message.getDependencyMinerRef();
+        getContext().getLog().info("Number of InputFiles received in DataProvider {}",String.valueOf(inputFiles.length));
+        sendTaskToWorker();
+        return this;
+    }
+
     private void sendTaskToWorker() {
-        if (this.headers != null && this.batchLines != null && this.dependencyMinerRef != null) {
-            getContext().getLog().info("Sending headers and batches to worker");
-            ActorRef<DependencyWorker.Message> firstWorker = dependencyWorkers.get(0);
-            firstWorker.tell(new DependencyWorker.TaskMessage(this.dependencyMinerRef, this.headers, this.batchLines));
+        if (this.inputFiles != null && this.headers != null && this.batchLines != null && this.dependencyMinerRef != null) {
+            getContext().getLog().info("Preparing to distribute tasks to workers");
+
+            int fileCount = headers.length;
+            int workerCount = dependencyWorkers.size();
+
+            if (workerCount == 0) {
+                getContext().getLog().info("No workers available to distribute tasks");
+                return;
+            }
+
+            for (int i = 0; i < fileCount; i++) {
+                for (int j = 0; j < fileCount; j++) {
+                    ActorRef<DependencyWorker.Message> worker = dependencyWorkers.get((i * fileCount + j) % workerCount);
+
+                    String[][] pairHeaders = {headers[i], headers[j]};
+                    List<List<String[]>> pairBatches = List.of(batchLines.get(i), batchLines.get(j));
+                    List<File> pairFiles = List.of(inputFiles[i], inputFiles[j]); // Map input files by indices
+
+                    getContext().getLog().info("Assigning task for headers [{}] and [{}] to worker {}", i, j, worker);
+                    worker.tell(new DependencyWorker.TaskMessage(this.dependencyMinerRef, pairHeaders, pairBatches, pairFiles));
+                }
+            }
         } else {
             getContext().getLog().info("Headers or batches are not yet fully received");
         }
