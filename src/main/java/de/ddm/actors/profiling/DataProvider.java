@@ -76,13 +76,15 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
 
     public static final String DEFAULT_NAME = "dataProvider";
 
-    public static Behavior<Message> create(ActorRef<DependencyWorker.Message> dependencyWorkerRef) {
-        return Behaviors.setup(context -> new DataProvider(context, dependencyWorkerRef));
+    public static Behavior<Message> create(String role) {
+        return Behaviors.setup(context -> new DataProvider(context,role));
     }
 
-    private DataProvider(ActorContext<Message> context, ActorRef<DependencyWorker.Message> dependencyWorkerRef) {
+    private DataProvider(ActorContext<Message> context,String role) {
         super(context);
-        this.dependencyWorkerRef = dependencyWorkerRef;
+//        this.dependencyWorkerRef = dependencyWorkerRef;
+        this.role=role;
+        this.dependencyWorkers = new ArrayList<>();
 
 
 //        this.headers = new String[20][20];
@@ -104,13 +106,14 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
     // Actor State //
     /////////////////
 
-    private final ActorRef<DependencyWorker.Message> dependencyWorkerRef;
 //    private final Map<Integer, String[]> assignedHeaders = new HashMap<>();
     private String[][] headers;
     private  List<List<String[]>> batchLines;
     private final Map<Integer, List<String[]>> assignedBatches = new HashMap<>();
     private final ActorRef<LargeMessageProxy.Message> largeMessageProxy;
     private ActorRef<DependencyMiner.Message> dependencyMinerRef; // Store DependencyMiner reference
+    private final String role;
+    private final List<ActorRef<DependencyWorker.Message>> dependencyWorkers;
 
     ////////////////////
     // Actor Behavior //
@@ -122,6 +125,7 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
                 .onMessage(ReceptionistListingMessage.class, this::handle)
                 .onMessage(AssignHeadersMessage.class, this::handle)
                 .onMessage(AssignBatchMessage.class, this::handle)
+                .onMessage(SetDependencyWorkerReference.class, this::handle)
 //                .onMessage(StealHeadersMessage.class, this::handle)
                 .build();
     }
@@ -132,7 +136,8 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
         for (ActorRef<DependencyMiner.Message> dependencyMiner : dependencyMiners)
             // this dependencyMiner(like Master) will then notify other registered actors about this new actors
             //availability
-            dependencyMiner.tell(new DependencyMiner.RegistrationMessage(this.getContext().getSelf()));
+            dependencyMiner.tell(new DependencyMiner.RegistrationMessage(this.getContext().getSelf(),this.role));
+            getContext().getLog().info("Data Prov ref sent to DepMiner");
         return this;
     }
 
@@ -141,6 +146,7 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
         getContext().getLog().info("Getting headers");
         this.headers = message.getHeaders();
         this.dependencyMinerRef = message.getDependencyMinerRef();
+        getContext().getLog().info(String.valueOf(headers.length));
         sendTaskToWorker(); // Send both headers and batches if available
         return this;
     }
@@ -150,6 +156,7 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
         getContext().getLog().info("Getting batches");
         this.batchLines = message.getBatches();
         this.dependencyMinerRef = message.getDependencyMinerRef();
+        getContext().getLog().info(String.valueOf(batchLines.size()));
         sendTaskToWorker(); // Send both headers and batches if available
         return this;
     }
@@ -157,15 +164,28 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
     private void sendTaskToWorker() {
         if (this.headers != null && this.batchLines != null && this.dependencyMinerRef != null) {
             getContext().getLog().info("Sending headers and batches to worker");
-            dependencyWorkerRef.tell(new DependencyWorker.TaskMessage(this.dependencyMinerRef, this.headers, this.batchLines));
+            ActorRef<DependencyWorker.Message> firstWorker = dependencyWorkers.get(0);
+            firstWorker.tell(new DependencyWorker.TaskMessage(this.dependencyMinerRef, this.headers, this.batchLines));
         } else {
             getContext().getLog().info("Headers or batches are not yet fully received");
         }
     }
+
+    private Behavior<Message> handle(SetDependencyWorkerReference message) {
+        ActorRef<DependencyWorker.Message> dependencyWorker = message.getDependencyWorkerRef();
+        if (!this.dependencyWorkers.contains(dependencyWorker)) {
+            this.dependencyWorkers.add(dependencyWorker);
+            this.getContext().watch(dependencyWorker);
+            // The worker should get some work ... let me send her something before I figure out what I actually want from her.
+            // I probably need to idle the worker for a while, if I do not have work for it right now ... (see master/worker pattern)
+            getContext().getLog().info("Number of dep workers");
+            getContext().getLog().info(String.valueOf(dependencyWorkers.size()));
+        }
+        return this;
+    }}
 
 //    private Behavior<Message> handle(StealHeadersMessage message) {
 //        message.getDependencyMiner().tell(new DependencyMiner.RegistrationMessage(this.getContext().getSelf()));
 //        return this;
 //    }
 
-}

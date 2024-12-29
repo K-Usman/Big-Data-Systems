@@ -14,16 +14,13 @@ import de.ddm.serialization.AkkaSerializable;
 import de.ddm.singletons.InputConfigurationSingleton;
 import de.ddm.singletons.SystemConfigurationSingleton;
 import de.ddm.structures.InclusionDependency;
-import de.ddm.utils.MemoryUtils;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
 
 public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 
@@ -63,6 +60,16 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	public static class RegistrationMessage implements Message {
 		private static final long serialVersionUID = -4025238529984914107L;
 		ActorRef<DataProvider.Message> dataProvider;
+		String role;
+	}
+
+	@Getter
+	@NoArgsConstructor
+	@AllArgsConstructor
+	public static class GetWorkerRef implements Message {
+		private static final long serialVersionUID = 425842132825518251L;
+		ActorRef<DependencyWorker.Message> dependencyWorkerRef;
+		String role;
 	}
 
 	@Getter
@@ -89,6 +96,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	// with the creation of dependencyminer, other actors inputreader,resultcollector and largemessageproxy will be spawned.
 	private DependencyMiner(ActorContext<Message> context) {
 		super(context);
+		this.role="";
 		this.discoverNaryDependencies = SystemConfigurationSingleton.get().isHardMode();
 		this.inputFiles = InputConfigurationSingleton.get().getInputFiles();
 		this.headerLines = new String[this.inputFiles.length][];
@@ -103,6 +111,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 		this.resultCollector = context.spawn(ResultCollector.create(), ResultCollector.DEFAULT_NAME);
 		this.largeMessageProxy = this.getContext().spawn(LargeMessageProxy.create(this.getContext().getSelf().unsafeUpcast()), LargeMessageProxy.DEFAULT_NAME);
 
+		this.dataProviders = new ArrayList<>();
 		this.dependencyWorkers = new ArrayList<>();
 
 		context.getSystem().receptionist().tell(Receptionist.register(dependencyMinerService, context.getSelf()));
@@ -122,8 +131,10 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	private final List<ActorRef<InputReader.Message>> inputReaders;
 	private final ActorRef<ResultCollector.Message> resultCollector;
 	private final ActorRef<LargeMessageProxy.Message> largeMessageProxy;
+	private final String role;
+	private final List<ActorRef<DataProvider.Message>> dataProviders;
+	private final List<ActorRef<DependencyWorker.Message>> dependencyWorkers;
 
-	private final List<ActorRef<DataProvider.Message>> dependencyWorkers;
 
 	////////////////////
 	// Actor Behavior //
@@ -137,6 +148,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 				.onMessage(HeaderMessage.class, this::handle)
 				.onMessage(RegistrationMessage.class, this::handle)
 				.onMessage(CompletionMessage.class, this::handle)
+				.onMessage(GetWorkerRef.class, this::handle)
 				.onSignal(Terminated.class, this::handle)
 				.build();
 	}
@@ -179,23 +191,49 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	//register or add the dependency worker to the list dependencyWorkers
 	private Behavior<Message> handle(RegistrationMessage message) {
 		ActorRef<DataProvider.Message> dataProvider = message.getDataProvider();
-		if (!this.dependencyWorkers.contains(dataProvider)) {
-			this.dependencyWorkers.add(dataProvider);
+		String role=message.getRole();
+		getContext().getLog().info(String.valueOf(dataProviders.size()));
+		if (!this.dataProviders.contains(dataProvider)) {
+			this.dataProviders.add(dataProvider);
 			this.getContext().watch(dataProvider);
 			// The worker should get some work ... let me send her something before I figure out what I actually want from her.
 			// I probably need to idle the worker for a while, if I do not have work for it right now ... (see master/worker pattern)
-			if(this.headerLines==null){
-				getContext().getLog().info("Header is null");
+			getContext().getLog().info(String.valueOf(dataProviders.size()));
+			getContext().getLog().info(role);
+			if(role.equals("worker")) {
+				getContext().getLog().info("Sending data to Data Provider from Dep Miner");
+				if (this.headerLines == null) {
+					getContext().getLog().info("Header is null");
+				}
+				dataProvider.tell(new DataProvider.AssignHeadersMessage(this.getContext().getSelf(), this.headerLines));
+				if (this.batchLines == null) {
+					getContext().getLog().info("Batches are empty");
+				}
+				dataProvider.tell(new DataProvider.AssignBatchMessage(this.getContext().getSelf(), this.batchLines));
+			}else {
+				getContext().getLog().info("Data Provider not yet joined");
 			}
-			dataProvider.tell(new DataProvider.AssignHeadersMessage(this.getContext().getSelf(),this.headerLines));
-			if(this.batchLines==null){
-				getContext().getLog().info("Batches are empty");
-			}
-			dataProvider.tell(new DataProvider.AssignBatchMessage(this.getContext().getSelf(),this.batchLines));
 		}
 		return this;
 	}
 
+	private Behavior<Message> handle(GetWorkerRef message){
+		ActorRef<DependencyWorker.Message> dependencyWorker = message.getDependencyWorkerRef();
+		String role=message.getRole();
+		if (!this.dependencyWorkers.contains(dependencyWorker)) {
+			this.dependencyWorkers.add(dependencyWorker);
+			this.getContext().watch(dependencyWorker);
+
+			if(role.equals("worker")) {
+				getContext().getLog().info("This is inside GetWorker"+role);
+				dependencyWorker.tell(new DependencyWorker.GetFiles(this.inputFiles));
+				getContext().getLog().info("Sent input files to Dep Worker from Miner");
+			}
+
+
+	}
+		return this;
+	}
 	private Behavior<Message> handle(CompletionMessage message) {
 		ActorRef<DependencyWorker.Message> dependencyWorker = message.getDependencyWorker();
 		// If this was a reasonable result, I would probably do something with it and potentially generate more work ... for now, let's just generate a random, binary IND.
@@ -222,7 +260,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 
 	private Behavior<Message> handle(Terminated signal) {
 		ActorRef<DependencyWorker.Message> dependencyWorker = signal.getRef().unsafeUpcast();
-		this.dependencyWorkers.remove(dependencyWorker);
+		this.dataProviders.remove(dependencyWorker);
 		return this;
 	}
 }

@@ -7,6 +7,8 @@ import akka.actor.typed.javadsl.AbstractBehavior;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
+import akka.cluster.typed.ClusterSingleton;
+import akka.cluster.typed.SingletonActor;
 import de.ddm.actors.patterns.Reaper;
 import de.ddm.actors.profiling.DataProvider;
 import de.ddm.actors.profiling.DependencyWorker;
@@ -43,26 +45,35 @@ public class Worker extends AbstractBehavior<Worker.Message> {
 
 	private Worker(ActorContext<Message> context) {
 		super(context);
-		Reaper.watchWithDefaultReaper(this.getContext().getSelf());
 
+		Reaper.watchWithDefaultReaper(this.getContext().getSelf());
+		getContext().getLog().info("this is spawned in:"+SystemConfigurationSingleton.get().getRole());
+		this.role=SystemConfigurationSingleton.get().getRole();
+		// Create a single DataProvider actor
+		ActorRef<DataProvider.Message> providerProxy = context.spawn(
+				DataProvider.create(role), // Passing null initially
+				"DataProvider"
+		);
+		context.getLog().info("Single DataProvider actor created");
 		final int numWorkers = SystemConfigurationSingleton.get().getNumWorkers();
 		this.workers = new ArrayList<>(numWorkers);
 		for (int id = 0; id < numWorkers; id++) {
 			ActorRef<DependencyWorker.Message> dependencyWorkerRef = context.spawn(
-					DependencyWorker.create(),
+					DependencyWorker.create(role),
 					DependencyWorker.DEFAULT_NAME + "_" + id,
 					DispatcherSelector.fromConfig("akka.worker-pool-dispatcher")
 			);
 			this.workers.add(dependencyWorkerRef);
-			ActorRef<DataProvider.Message> dataProviderRef = context.spawn(
-					DataProvider.create(dependencyWorkerRef),
-					"DataProvider"
-			);
-			context.getLog().info("DataProvider actor created, sending ReceptionistListingMessage...");
-			// Send the DependencyWorker reference to DataProvider
-			dataProviderRef.tell(new DataProvider.SetDependencyWorkerReference(dependencyWorkerRef));
+//			ClusterSingleton singleton=ClusterSingleton.get(this.getContext().getSystem());
+//			ActorRef<DataProvider.Message> providerProxy= singleton.init(SingletonActor.of(DataProvider.create(dependencyWorkerRef,role),"DataProvider"));
+			;
+			// Send DependencyWorker reference to the single DataProvider actor
+
+			providerProxy.tell(new DataProvider.SetDependencyWorkerReference(dependencyWorkerRef));
 			context.getLog().info("Sent DependencyWorker reference: {} to DataProvider", dependencyWorkerRef.path());
 		}
+
+
 	}
 
 	/////////////////
@@ -70,6 +81,7 @@ public class Worker extends AbstractBehavior<Worker.Message> {
 	/////////////////
 
 	final List<ActorRef<DependencyWorker.Message>> workers;
+	private final String role;
 
 	////////////////////
 	// Actor Behavior //
