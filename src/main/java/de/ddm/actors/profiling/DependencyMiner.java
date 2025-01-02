@@ -82,6 +82,13 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 		List<InclusionDependency> inclusionDependencies;
 	}
 
+	@Getter
+	@NoArgsConstructor
+	public static class IncrementTaskMessage implements Message {
+		private static final long serialVersionUID = -8752592586667703025L;
+	}
+
+
 	////////////////////////
 	// Actor Construction //
 	////////////////////////
@@ -138,6 +145,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	private final List<ActorRef<DataProvider.Message>> dataProviders;
 	private final List<ActorRef<DependencyWorker.Message>> dependencyWorkers;
 	private boolean[] fileCompleted;
+	private int activeTasks = 0;
 
 
 	////////////////////
@@ -153,6 +161,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 				.onMessage(RegistrationMessage.class, this::handle)
 				.onMessage(CompletionMessage.class, this::handle)
 				.onMessage(GetWorkerRef.class, this::handle)
+				.onMessage(IncrementTaskMessage.class, this::handle)
 				.onSignal(Terminated.class, this::handle)
 				.build();
 	}
@@ -298,9 +307,20 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 //		dependencyWorker.tell(new DependencyWorker.TaskMessage(this.largeMessageProxy, 42));
 
 		// At some point, I am done with the discovery. That is when I should call my end method. Because I do not work on a completable task yet, I simply call it after some time.
-//		if (remainingFilesCount() == 0) {
-//			this.end();
-//		}
+		activeTasks--;
+
+		getContext().getLog().info("Task completed. Active tasks remaining: {}", activeTasks);
+
+		// Check if the system should shut down
+		if (remainingFilesCount() == 0 && activeTasks == 0) {
+			this.end();
+		}
+		return this;
+	}
+
+	private Behavior<Message> handle(IncrementTaskMessage message) {
+		activeTasks++;
+		getContext().getLog().info("New task assigned. Active tasks: {}", activeTasks);
 		return this;
 	}
 

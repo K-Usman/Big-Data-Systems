@@ -206,6 +206,7 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
 
                             getContext().getLog().info("Assigning task for headers [{}] and [{}] to worker {}", i, j, worker);
                             worker.tell(new DependencyWorker.TaskMessage(this.dependencyMinerRef, pairHeaders, pairBatches, pairFiles));
+                            this.dependencyMinerRef.tell(new DependencyMiner.IncrementTaskMessage());
                         }
                     }
                 }
