@@ -101,6 +101,8 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 		this.discoverNaryDependencies = SystemConfigurationSingleton.get().isHardMode();
 		this.inputFiles = InputConfigurationSingleton.get().getInputFiles();
 		this.headerLines = new String[this.inputFiles.length][];
+		this.fileCompleted = new boolean[inputFiles.length]; // One entry for each file
+		Arrays.fill(this.fileCompleted, false);
 		this.batchLines = new ArrayList<>(this.inputFiles.length);
 		for (int i = 0; i < this.inputFiles.length; i++) {
 			this.batchLines.add(new ArrayList<>()); // Initialize each batch list
@@ -135,6 +137,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	private final String role;
 	private final List<ActorRef<DataProvider.Message>> dataProviders;
 	private final List<ActorRef<DependencyWorker.Message>> dependencyWorkers;
+	private boolean[] fileCompleted;
 
 
 	////////////////////
@@ -174,11 +177,18 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 		int id = message.getId();
 		List<String[]> batch = message.getBatch();
 
-		// Add the batch content to batchLines
+		// Add the batch to the respective batch lines if the file is still active
 		if (id < batchLines.size()) {
-			batchLines.get(id).addAll(batch); // Add all rows to the corresponding batch list
-		} else {
-			getContext().getLog().info("Received batch for invalid id: {}", id);
+			batchLines.get(id).addAll(batch);
+		}
+
+		// Check if this file has completed processing
+		if (batch.isEmpty()) { // Empty batch means no more data for this file
+			fileCompleted[id] = true; // Mark this file as completed
+			getContext().getLog().info("File id {} completed. Remaining files: {}", id, remainingFilesCount());
+
+			// Once all files are processed, call the end method
+
 		}
 
 		return this;
@@ -244,8 +254,12 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 						for (int i = 0; i < this.inputFiles.length; i++) {
 							this.batchLines.add(new ArrayList<>()); // Initialize each batch list
 						}
-						for (ActorRef<InputReader.Message> inputReader : this.inputReaders)
-							inputReader.tell(new InputReader.ReadBatchMessage(this.getContext().getSelf(), 300));
+						for (int id = 0; id < this.inputReaders.size(); id++) {
+							ActorRef<InputReader.Message> inputReader = this.inputReaders.get(id);
+							if (!fileCompleted[id]) { // Use 'id' to reference fileCompleted array
+								inputReader.tell(new InputReader.ReadBatchMessage(this.getContext().getSelf(), 300));
+							}
+						}
 					}
 				}
 
@@ -284,7 +298,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 //		dependencyWorker.tell(new DependencyWorker.TaskMessage(this.largeMessageProxy, 42));
 
 		// At some point, I am done with the discovery. That is when I should call my end method. Because I do not work on a completable task yet, I simply call it after some time.
-		if(result.size()>55){
+		if (remainingFilesCount() == 0) {
 			this.end();
 		}
 		return this;
@@ -300,5 +314,15 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 		ActorRef<DependencyWorker.Message> dependencyWorker = signal.getRef().unsafeUpcast();
 		this.dataProviders.remove(dependencyWorker);
 		return this;
+	}
+
+	private long remainingFilesCount() {
+		long count = 0;
+		for (boolean completed : fileCompleted) {
+			if (!completed) {
+				count++;
+			}
+		}
+		return count;
 	}
 }
