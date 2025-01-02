@@ -111,12 +111,18 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 		List<File> inputFiles = message.getFiles();
 		getContext().getLog().info("Input files are {}", inputFiles);
 
+		getContext().getLog().info("Batches in DW are : ");
+		batches.forEach(batche -> {
+			getContext().getLog().info("Batch : ");
+			for (String[] batchItem : batche) {
+				getContext().getLog().info("  " + String.join(", ", batchItem));
+			}
+		});
 		List<InclusionDependency> inds = new ArrayList<>();
 
 		if (!inputFiles.isEmpty() && headers.length == 2 && batches.size() == 2) {
 			this.getContext().getLog().info("Start working");
 			this.getContext().getLog().info("Number of Files received: {}", inputFiles.size());
-
 			// Prepare dependent and referenced pairs
 			File dependentFile = inputFiles.get(0);
 			List<String[]> dependentBatch = batches.get(0);
@@ -155,11 +161,20 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 						String[] dependentAttributes = {dependentHeaders[i]};
 						String[] referencedAttributes = {referencedHeaders[j]};
 
-						inds.add(new InclusionDependency(dependentFile, dependentAttributes, referencedFile, referencedAttributes));
+						InclusionDependency newInd = new InclusionDependency(dependentFile, dependentAttributes, referencedFile, referencedAttributes);
 
-						getContext().getLog().info("IND found: {} (Dependent from {}) -> {} (Referenced from {})",
-								dependentAttributes[0], dependentFile.getName(),
-								referencedAttributes[0], referencedFile.getName());
+						// Use the register method to ensure uniqueness
+						if (newInd.register()) {
+							inds.add(newInd);
+
+							getContext().getLog().info("IND found: {} (Dependent from {}) -> {} (Referenced from {})",
+									dependentAttributes[0], dependentFile.getName(),
+									referencedAttributes[0], referencedFile.getName());
+						} else {
+							getContext().getLog().info("Duplicate IND found, not adding: {} (Dependent from {}) -> {} (Referenced from {})",
+									dependentAttributes[0], dependentFile.getName(),
+									referencedAttributes[0], referencedFile.getName());
+						}
 					}
 				}
 			}
@@ -170,5 +185,6 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 		}
 
 		return this;
-	}
-}
+	}}
+
+

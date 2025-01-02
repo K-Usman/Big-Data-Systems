@@ -6,18 +6,29 @@ import lombok.Getter;
 import java.io.File;
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Getter
 @AllArgsConstructor
 public class InclusionDependency {
 
+	private static final Set<InclusionDependency> uniqueDependencies = ConcurrentHashMap.newKeySet();
 
 	private final File dependentFile;
 	private final String[] dependentAttributes;
 
-	//for example, dependentAttributes from dependentFile are included in referencedAttributes from this particular file referencedFile
+	// For example, dependentAttributes from dependentFile are included in referencedAttributes from this particular file referencedFile
 	private final File referencedFile;
 	private final String[] referencedAttributes;
+
+	/**
+	 * Registers this InclusionDependency in the uniqueDependencies set.
+	 * @return true if the dependency was added successfully, false if it already exists.
+	 */
+	public boolean register() {
+		return uniqueDependencies.add(this);
+	}
 
 	@Override
 	public String toString() {

@@ -20,6 +20,7 @@ import lombok.NoArgsConstructor;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
@@ -126,7 +127,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	private final boolean discoverNaryDependencies;
 	private final File[] inputFiles;
 	private final String[][] headerLines;
-	private final List<List<String[]>> batchLines;
+	private  List<List<String[]>> batchLines;
 
 	private final List<ActorRef<InputReader.Message>> inputReaders;
 	private final ActorRef<ResultCollector.Message> resultCollector;
@@ -159,7 +160,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 		for (ActorRef<InputReader.Message> inputReader : this.inputReaders)
 			inputReader.tell(new InputReader.ReadHeaderMessage(this.getContext().getSelf()));
 		for (ActorRef<InputReader.Message> inputReader : this.inputReaders)
-			inputReader.tell(new InputReader.ReadBatchMessage(this.getContext().getSelf(), 10000));
+			inputReader.tell(new InputReader.ReadBatchMessage(this.getContext().getSelf(), 300));
 		this.startTime = System.currentTimeMillis();
 		return this;
 	}
@@ -170,50 +171,89 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	}
 
 	private Behavior<Message> handle(BatchMessage message) {
-		// Ignoring batch content for now ... but I could do so much with it.
 		int id = message.getId();
 		List<String[]> batch = message.getBatch();
+
+		// Add the batch content to batchLines
 		if (id < batchLines.size()) {
 			batchLines.get(id).addAll(batch); // Add all rows to the corresponding batch list
 		} else {
 			getContext().getLog().info("Received batch for invalid id: {}", id);
 		}
 
-
-//		System.out.println(MemoryUtils.byteSizeOf(message.getBatch()));
-//		System.out.println(MemoryUtils.bytesMax() + "    " + MemoryUtils.bytesFree());
-
-// here it will check if the current batch is empty then it will request a new batch.
-		if (!message.getBatch().isEmpty())
-			this.inputReaders.get(message.getId()).tell(new InputReader.ReadBatchMessage(this.getContext().getSelf(), 10000));
 		return this;
 	}
 	//register or add the dependency worker to the list dependencyWorkers
 	private Behavior<Message> handle(RegistrationMessage message) {
 		ActorRef<DataProvider.Message> dataProvider = message.getDataProvider();
-		String role=message.getRole();
+		String role = message.getRole();
+
+		getContext().getLog().info("BatchLines size is {} ", batchLines.size());
+
 		if (!this.dataProviders.contains(dataProvider)) {
 			this.dataProviders.add(dataProvider);
 			this.getContext().watch(dataProvider);
-			// The worker should get some work ... let me send her something before I figure out what I actually want from her.
-			// I probably need to idle the worker for a while, if I do not have work for it right now ... (see master/worker pattern)
-			getContext().getLog().info("Number of registered Data Providers {}",String.valueOf(dataProviders.size()));
-//			getContext().getLog().info(role);
-			if(role.equals("worker")) {
+			getContext().getLog().info("Number of registered Data Providers {}", dataProviders.size());
+
+			if (role.equals("worker")) {
 				getContext().getLog().info("Sending data to Data Provider from Dep Miner");
-				if (this.headerLines == null) {
-					getContext().getLog().info("Header is null");
-				}
+
+				// Assign headers
 				dataProvider.tell(new DataProvider.AssignHeadersMessage(this.getContext().getSelf(), this.headerLines));
-				if (this.batchLines == null) {
-					getContext().getLog().info("Batches are empty");
+				getContext().getLog().info("Number of input files before checking cond in DM{}", inputFiles.length);
+				getContext().getLog().info("Number of batches before checking cond in DM {}", batchLines.size());
+
+				// Check if we can send the first 'inputFiles.length' batches
+				if (batchLines.size() == inputFiles.length) {
+					List<List<String[]>> batchesToSend = new ArrayList<>();
+
+					// Add first 'inputFiles.length' batches to batchesToSend
+					for (int i = 0; i < inputFiles.length; i++) {
+						batchesToSend.add(new ArrayList<>(batchLines.get(i))); // Clone to avoid concurrency issues
+					}
+
+					getContext().getLog().info("Size of BatchesToSend {}", batchesToSend.size());
+					getContext().getLog().info("Batch sending to DP is : ");
+					batchesToSend.forEach(batche->{
+						getContext().getLog().info("Batch : ");
+						for(String[] batchItem: batche){
+							getContext().getLog().info("  " + String.join(", ", batchItem));
+						}
+					});
+
+					// Send to DataProvider
+					dataProvider.tell(new DataProvider.AssignBatchMessage(this.getContext().getSelf(), batchesToSend));
+
+					// Log the operation
+					getContext().getLog().info("Sent {} batches to DataProvider.", inputFiles.length);
+
+					// Remove the first 'inputFiles.length' batches from batchLines
+					for (int i = 0; i < inputFiles.length; i++) {
+						batchLines.remove(0);  // Remove each batch from the list
+					}
+
+					// Log the batchLines size after removing batches
+					getContext().getLog().info("BatchLines after sending to DP {}", batchLines.size());
+
+					// Now request new batches from InputReader
+					// Make sure to request more batches for the next process
+					if (batchLines.isEmpty()) {
+						// Check if there are still batches remaining and if needed, request more
+						getContext().getLog().info("Requesting next batch from InputReader");
+						batchLines = new ArrayList<>(this.inputFiles.length);
+						for (int i = 0; i < this.inputFiles.length; i++) {
+							this.batchLines.add(new ArrayList<>()); // Initialize each batch list
+						}
+						for (ActorRef<InputReader.Message> inputReader : this.inputReaders)
+							inputReader.tell(new InputReader.ReadBatchMessage(this.getContext().getSelf(), 300));
+					}
 				}
-				dataProvider.tell(new DataProvider.AssignBatchMessage(this.getContext().getSelf(), this.batchLines));
-				if (this.inputFiles == null) {
-					getContext().getLog().info("InputFiles are empty");
-				}
+
+				// Assign input files
 				dataProvider.tell(new DataProvider.GetFiles(this.getContext().getSelf(), this.inputFiles));
-			}else {
+				this.dataProviders.remove(dataProvider);
+
+			} else {
 				getContext().getLog().info("Data Provider from worker actor system not yet joined");
 			}
 		}

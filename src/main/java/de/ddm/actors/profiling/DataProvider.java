@@ -39,9 +39,9 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
     @AllArgsConstructor
     public static class AssignHeadersMessage  implements Message {
         private static final long serialVersionUID = -2836164504241926323L;
-//        ActorRef<LargeMessageProxy.Message> dependencyMinerLargeMessageProxy;
-          ActorRef<DependencyMiner.Message> dependencyMinerRef;
-          String[][] headers;
+        //        ActorRef<LargeMessageProxy.Message> dependencyMinerLargeMessageProxy;
+        ActorRef<DependencyMiner.Message> dependencyMinerRef;
+        String[][] headers;
     }
 
 
@@ -50,7 +50,7 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
     @AllArgsConstructor
     public static class SetDependencyWorkerReference   implements Message {
         private static final long serialVersionUID = -4644621994959205733L;
-         ActorRef<DependencyWorker.Message> dependencyWorkerRef;
+        ActorRef<DependencyWorker.Message> dependencyWorkerRef;
     }
 
     @Getter
@@ -116,7 +116,7 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
     // Actor State //
     /////////////////
 
-//    private final Map<Integer, String[]> assignedHeaders = new HashMap<>();
+    //    private final Map<Integer, String[]> assignedHeaders = new HashMap<>();
     private String[][] headers;
     private  List<List<String[]>> batchLines;
     private final Map<Integer, List<String[]>> assignedBatches = new HashMap<>();
@@ -150,7 +150,7 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
             // this dependencyMiner(like Master) will then notify other registered actors about this new actors
             //availability
             dependencyMiner.tell(new DependencyMiner.RegistrationMessage(this.getContext().getSelf(),this.role));
-            getContext().getLog().info("Data Prov ref has been sent to DepMiner");
+        getContext().getLog().info("Data Prov ref has been sent to DepMiner");
         return this;
     }
 
@@ -207,6 +207,7 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
                     worker.tell(new DependencyWorker.TaskMessage(this.dependencyMinerRef, pairHeaders, pairBatches, pairFiles));
                 }
             }
+            dependencyMinerRef.tell(new DependencyMiner.RegistrationMessage(this.getContext().getSelf(),this.role));
         } else {
             getContext().getLog().info("Headers or batches are not yet fully received");
         }
@@ -228,4 +229,3 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
 //        message.getDependencyMiner().tell(new DependencyMiner.RegistrationMessage(this.getContext().getSelf()));
 //        return this;
 //    }
-
