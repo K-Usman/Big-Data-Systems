@@ -111,13 +111,13 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 		List<File> inputFiles = message.getFiles();
 		getContext().getLog().info("Input files are {}", inputFiles);
 
-		getContext().getLog().info("Batches in DW are : ");
-		batches.forEach(batche -> {
-			getContext().getLog().info("Batch : ");
-			for (String[] batchItem : batche) {
-				getContext().getLog().info("  " + String.join(", ", batchItem));
-			}
-		});
+//		getContext().getLog().info("Batches in DW are : ");
+//		batches.forEach(batche -> {
+//			getContext().getLog().info("Batch : ");
+//			for (String[] batchItem : batche) {
+//				getContext().getLog().info("  " + String.join(", ", batchItem));
+//			}
+//		});
 		List<InclusionDependency> inds = new ArrayList<>();
 
 		if (!inputFiles.isEmpty() && headers.length == 2 && batches.size() == 2) {

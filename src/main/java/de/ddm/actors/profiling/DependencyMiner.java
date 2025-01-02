@@ -163,7 +163,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 		for (ActorRef<InputReader.Message> inputReader : this.inputReaders)
 			inputReader.tell(new InputReader.ReadHeaderMessage(this.getContext().getSelf()));
 		for (ActorRef<InputReader.Message> inputReader : this.inputReaders)
-			inputReader.tell(new InputReader.ReadBatchMessage(this.getContext().getSelf(), 300));
+			inputReader.tell(new InputReader.ReadBatchMessage(this.getContext().getSelf(), 200));
 		this.startTime = System.currentTimeMillis();
 		return this;
 	}
@@ -257,7 +257,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 						for (int id = 0; id < this.inputReaders.size(); id++) {
 							ActorRef<InputReader.Message> inputReader = this.inputReaders.get(id);
 							if (!fileCompleted[id]) { // Use 'id' to reference fileCompleted array
-								inputReader.tell(new InputReader.ReadBatchMessage(this.getContext().getSelf(), 300));
+								inputReader.tell(new InputReader.ReadBatchMessage(this.getContext().getSelf(), 200));
 							}
 						}
 					}
@@ -298,9 +298,9 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 //		dependencyWorker.tell(new DependencyWorker.TaskMessage(this.largeMessageProxy, 42));
 
 		// At some point, I am done with the discovery. That is when I should call my end method. Because I do not work on a completable task yet, I simply call it after some time.
-		if (remainingFilesCount() == 0) {
-			this.end();
-		}
+//		if (remainingFilesCount() == 0) {
+//			this.end();
+//		}
 		return this;
 	}
 

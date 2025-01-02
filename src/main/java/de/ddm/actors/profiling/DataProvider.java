@@ -187,27 +187,32 @@ public class DataProvider extends AbstractBehavior<DataProvider.Message> {
         if (this.inputFiles != null && this.headers != null && this.batchLines != null && this.dependencyMinerRef != null) {
             getContext().getLog().info("Preparing to distribute tasks to workers");
 
-            int fileCount = headers.length;
             int workerCount = dependencyWorkers.size();
-
             if (workerCount == 0) {
                 getContext().getLog().info("No workers available to distribute tasks");
                 return;
             }
 
-            for (int i = 0; i < fileCount; i++) {
-                for (int j = 0; j < fileCount; j++) {
-                    ActorRef<DependencyWorker.Message> worker = dependencyWorkers.get((i * fileCount + j) % workerCount);
+            // Iterate over batches and select only non-empty ones
+            for (int i = 0; i < batchLines.size(); i++) {
+                if (!batchLines.get(i).isEmpty()) {
+                    for (int j = 0; j < batchLines.size(); j++) {
+                        if (!batchLines.get(j).isEmpty()) {
+                            ActorRef<DependencyWorker.Message> worker = dependencyWorkers.get((i * batchLines.size() + j) % workerCount);
 
-                    String[][] pairHeaders = {headers[i], headers[j]};
-                    List<List<String[]>> pairBatches = List.of(batchLines.get(i), batchLines.get(j));
-                    List<File> pairFiles = List.of(inputFiles[i], inputFiles[j]); // Map input files by indices
+                            String[][] pairHeaders = {headers[i], headers[j]};
+                            List<List<String[]>> pairBatches = List.of(batchLines.get(i), batchLines.get(j));
+                            List<File> pairFiles = List.of(inputFiles[i], inputFiles[j]);
 
-                    getContext().getLog().info("Assigning task for headers [{}] and [{}] to worker {}", i, j, worker);
-                    worker.tell(new DependencyWorker.TaskMessage(this.dependencyMinerRef, pairHeaders, pairBatches, pairFiles));
+                            getContext().getLog().info("Assigning task for headers [{}] and [{}] to worker {}", i, j, worker);
+                            worker.tell(new DependencyWorker.TaskMessage(this.dependencyMinerRef, pairHeaders, pairBatches, pairFiles));
+                        }
+                    }
                 }
             }
-            dependencyMinerRef.tell(new DependencyMiner.RegistrationMessage(this.getContext().getSelf(),this.role));
+
+            // Notify the DependencyMiner
+            dependencyMinerRef.tell(new DependencyMiner.RegistrationMessage(this.getContext().getSelf(), this.role));
         } else {
             getContext().getLog().info("Headers or batches are not yet fully received");
         }
