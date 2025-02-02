@@ -5,8 +5,12 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>ddm.de</groupId>
 	<artifactId>ddm-akka</artifactId>
-	<name>ddm-akka</name>
-	<version>1.0</version>
+    <packaging>pom</packaging>
+    <name>ddm-akka</name>
+    <modules>
+        <module>ddm-spark</module>
+    </modules>
+    <version>1.0</version>
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
